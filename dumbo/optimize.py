@@ -179,7 +179,7 @@ class MyOwnGP(gpytorch.models.ExactGP):
 		return torch.inverse(self.covar_module(self.train_x).evaluate())
 	
 	@staticmethod
-	def model_from_decomposition(decomposition, X, y, base_kernel=gpytorch.kernels.MaternKernel, base_kernel_args=[2.5]):
+	def model_from_decomposition(decomposition, X, y, base_kernel_class, base_kernel_args):
 		"""From the provided additive decomposition `decomposition`, build an additive gaussian process
 
 		Args:
@@ -188,16 +188,15 @@ class MyOwnGP(gpytorch.models.ExactGP):
 				X (torch.Tensor): the training observations in the input space, shape `(n,d)` for `n` observations and
 				`d`-dimensional input space
 				y (torch.Tensor): the training observations in the output space, shape `(n,)` for `n` observations
-				base_kernel (gpytorch.kernels.Kernel, optional): the base kernel in the additive model. Defaults to
-				gpytorch.kernels.MaternKernel.
-				base_kernel_args (list, optional): the arguments for the base kernel. Defaults to [2.5].
+				base_kernel_class (class from gpytorch.kernels.Kernel): the base kernel in the additive model.
+				base_kernel_args (list): the arguments for the base kernel.
 
 		Returns:
 				MyOwnGP: An additive gaussian process based on the provided additive decomposition
 		"""
 		kernel = None
 		for factor in decomposition:
-			new_k = gpytorch.kernels.ScaleKernel(base_kernel(*base_kernel_args, active_dims=torch.tensor(factor, dtype=torch.int32)))
+			new_k = gpytorch.kernels.ScaleKernel(base_kernel_class(*base_kernel_args, active_dims=torch.tensor(factor, dtype=torch.int32)))
 			if kernel is None:
 				kernel = new_k
 			else:
@@ -217,7 +216,8 @@ class MyGPFactor(gpytorch.models.ExactGP):
 		"""Build the GP factor.
 
 		Args:
-				intervals (torch.Tensor): list of infimum and supremum, of shape `(d,2)` if the objective function is `d`-dimensional
+				intervals (torch.Tensor): list of infimum and supremum, of shape `(d,2)` if the objective function is
+				`d`-dimensional
 				kernel (gpytorch.kernels.Kernel): the kernel used by the factor with the hyperparameters inference already
 				performed
 				train_x (torch.Tensor): the training observations in the input space, of shape `(n,d)` for `n` observations
@@ -652,7 +652,7 @@ class DuMBOOptimizer:
 	This class contains the DuMBO optimizer as described in [1] and is the main interface with the final user.
 	"""
 
-	def __init__(self, intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, precision=0.05, max_it=10):
+	def __init__(self, intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, precision=0.05, max_it=10, base_kernel_class=gpytorch.kernels.MaternKernel, base_kernel_args=[2.5]):
 		"""Build the DuMBO optimizer
 
 		Args:
@@ -667,16 +667,22 @@ class DuMBOOptimizer:
 				Defaults to None.
 				n_samples_per_iteration (int, optional): number of additive decomposition sampled at each iteration. Defaults to
 				5.
-				precision (float, optional): Tolerance on the diversity of the candidates found by ADMM. Stopping criterion for
+				precision (float, optional): tolerance on the diversity of the candidates found by ADMM. Stopping criterion for
 				ADMM. Defaults to 0.05.
-				max_it (int, optional): Number of maximal iterations allowed for ADMM. Stopping criterion for ADMM. Defaults to
+				max_it (int, optional): number of maximal iterations allowed for ADMM. Stopping criterion for ADMM. Defaults to
 				10.
+				base_kernel_class (class from gpytorch.kernels.Kernel, optional): kernel used for each factor of the inferred
+				additive decompositions. Defaults to gpytorch.kernels.MaternKernel.
+				base_kernel_args (list, optional): arguments for the base kernel. Defaults to [2.5].
 		"""
 		intervals = torch.tensor(intervals, dtype=torch.double)
 		self._normed_intervals = torch.zeros(intervals.size(), dtype=torch.double)
 		self._normed_intervals[:, 1] = 1.0
 		self._lower_bounds = intervals[:, 0]
 		self._upper_bounds = intervals[:, 1]
+
+		self._base_kernel_class = base_kernel_class
+		self._base_kernel_args = base_kernel_args
 
 		self._X = X if X is None else torch.tensor(X, dtype=torch.double)
 		self._n_init_points = n_init_points - (0 if X is None else self._X.size()[0])
@@ -698,7 +704,7 @@ class DuMBOOptimizer:
 	def first_decomposition(self):
 		if self._n_init_points <= 0:
 			self._current_decomposition = [np.arange(self._d)] if self._d == self._dmax else random_additive_decomposition(self._d, self._dmax)
-			self._current_model = MyOwnGP.model_from_decomposition(self._current_decomposition, self._norm_X, self._norm_y)
+			self._current_model = MyOwnGP.model_from_decomposition(self._current_decomposition, self._norm_X, self._norm_y, base_kernel_class=self._base_kernel_class, base_kernel_args=self._base_kernel_args)
 			self._current_model.fit()
 
 	def standardize_y(self):
@@ -746,7 +752,7 @@ class DuMBOOptimizer:
 			
 			if self._dmax > 1:
 				# Sample n_samples_per_iteration additive decompositions
-				decompositions, models = mcmc_sampling(self._current_decomposition, self._current_model, self._dmax, self._norm_X, self._norm_y, k=self._n_samples_per_iteration)
+				decompositions, models = mcmc_sampling(self._current_decomposition, self._current_model, self._dmax, self._norm_X, self._norm_y, self._base_kernel_class, self._base_kernel_args, k=self._n_samples_per_iteration)
 				self._current_decomposition = decompositions[-1]
 				self._current_model = models[-1]
 			else:

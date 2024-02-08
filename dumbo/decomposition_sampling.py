@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import dumbo.optimize
+import gpytorch
 
 r"""
 Methods for sampling additive decomposition according to Gardner et. al. (2017) (see [3] in README.md at the root
@@ -195,7 +196,7 @@ def sort_dimensions(dec):
 	"""
 	return [np.sort(f) for f in dec]
 
-def metropolis_hastings(decomposition, fitted_model, dmax, X, y):
+def metropolis_hastings(decomposition, fitted_model, dmax, X, y, base_kernel_class, base_kernel_args):
 	"""Sample a new additive decomposition based on the provided additive decomposition `decomposition` and the
 	corresponding gaussian process `fitted_model`.
 
@@ -207,6 +208,9 @@ def metropolis_hastings(decomposition, fitted_model, dmax, X, y):
 			X (torch.Tensor): the training observations in the input space, shape `(n,d)` for `n` observations and
 			`d`-dimensional input space
 			y (torch.Tensor): the training observations in the output space, shape `(n,)` for `n` observations
+			base_kernel_class (class from gpytorch.kernels.Kernel): the kernel used for each factor of the sampled additive
+			decomposition.
+			base_kernel_args (list): the arguments for the base kernel.
 
 	Returns:
 			tuple: the new sampled additive decomposition along with its corresponding gaussian process
@@ -241,7 +245,7 @@ def metropolis_hastings(decomposition, fitted_model, dmax, X, y):
 		# Evaluate the likelihood of the old model
 		likelihood_actual = fitted_model.get_mll()
 		# Evaluate the likelihood of the new model
-		new_model = dumbo.optimize.MyOwnGP.model_from_decomposition(new_decomposition, X, y)
+		new_model = dumbo.optimize.MyOwnGP.model_from_decomposition(new_decomposition, X, y, base_kernel_class=base_kernel_class, base_kernel_args=base_kernel_args)
 		new_model.fit()
 		likelihood_new = new_model.get_mll()
 
@@ -255,7 +259,7 @@ def metropolis_hastings(decomposition, fitted_model, dmax, X, y):
 	# Otherwise, keep the old one
 	return decomposition, fitted_model
 
-def mcmc_sampling(decomposition, fitted_model, dmax, X, y, k=5):
+def mcmc_sampling(decomposition, fitted_model, dmax, X, y, base_kernel_class, base_kernel_args, k=5):
 	"""Sample `k` additive decompositions starting from the provided additive decomposition `decomposition`.
 
 	Args:
@@ -266,6 +270,9 @@ def mcmc_sampling(decomposition, fitted_model, dmax, X, y, k=5):
 			X (torch.Tensor): the training observations in the input space, shape `(n,d)` for `n` observations and
 			`d`-dimensional input space
 			y (torch.Tensor): the training observations in the output space, shape `(n,)` for `n` observations
+			base_kernel_class (class from gpytorch.kernels.Kernel): the kernel used for each factor of the sampled additive
+			decompositions.
+			base_kernel_args (list): list of arguments for the base kernel.
 			k (int, optional): the number of additive decompositions to sample. Defaults to 5.
 
 	Returns:
@@ -275,7 +282,7 @@ def mcmc_sampling(decomposition, fitted_model, dmax, X, y, k=5):
 	decompositions = [decomposition]
 
 	for _ in range(k - 1):
-		new_dec, new_model = metropolis_hastings(decompositions[-1], models[-1], dmax, X, y)
+		new_dec, new_model = metropolis_hastings(decompositions[-1], models[-1], dmax, X, y, base_kernel_class, base_kernel_args)
 		models.append(new_model)
 		decompositions.append(new_dec)
 

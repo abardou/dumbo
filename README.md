@@ -53,8 +53,18 @@ To use DuMBO, just instantiate a `dumbo.optimize.DuMBOOptimizer` object using th
 
 ```python
 from dumbo.optimize import DuMBOOptimizer
+import gpytorch
 
-dumbo_optimizer = DuMBOOptimizer(intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, precision=0.05, max_it=10)
+dumbo_optimizer = DuMBOOptimizer(
+  intervals, # Objective function domain
+  X=None, y=None, # Training dataset (if any)
+  n_init_points=2, # Initial uniform sampling of observations
+  dmax=None, # MFS
+  n_samples_per_iteration=5, # Number of sampled additive decompositions
+  precision=0.05, max_it=10, # ADMM stopping criteria
+  base_kernel_class=gpytorch.kernels.MaternKernel, # Kernel class for the factors
+  base_kernel_args=[2.5] # Arguments for instantiating the kernel class
+)
 ```
 
 Its arguments are detailed below. Assuming that you want to optimize a black-box $f : \mathcal{D} \subset \mathbb{R}^d \to \mathbb{R}$:
@@ -67,6 +77,8 @@ Its arguments are detailed below. Assuming that you want to optimize a black-box
 * `n_samples_per_iteration` indicates the number of additive decompositions inferred at each iteration of DuMBO.
 * `precision` is the first stopping criterion for ADMM. The smaller it is, the more iterations are required for ADMM to stop.
 * `max_it` is the second stopping criterion for ADMM. It bounds the number of ADMM iterations.
+* `base_kernel_class` is the class of the covariance function for each factor of the inferred additive decompositions. It must derive from `gpytorch.kernels.Kernel`.
+* `base_kernel_args` is a list of arguments useful for the instantiation of `base_kernel_class`.
 
 Once instantiated, DuMBO can be used in a simple optimization loop:
 
