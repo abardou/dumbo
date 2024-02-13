@@ -64,6 +64,7 @@ dumbo_optimizer = DuMBOOptimizer(
   precision=0.05, max_it=10, # ADMM stopping criteria
   base_kernel_class=gpytorch.kernels.MaternKernel, # Kernel class for the factors
   base_kernel_args=[2.5] # Arguments for instantiating the kernel class
+  n_cores=None, # Number of available cores for parallel computation
 )
 ```
 
@@ -79,6 +80,8 @@ Its arguments are detailed below. Assuming that you want to optimize a black-box
 * `max_it` is the second stopping criterion for ADMM. It bounds the number of ADMM iterations.
 * `base_kernel_class` is the class of the covariance function for each factor of the inferred additive decompositions. It must derive from `gpytorch.kernels.Kernel`.
 * `base_kernel_args` is a list of arguments useful for the instantiation of `base_kernel_class`.
+* `n_cores` is the number of CPUs available for parallel computation.
+
 
 Once instantiated, DuMBO can be used in a simple optimization loop:
 

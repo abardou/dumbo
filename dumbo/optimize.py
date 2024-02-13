@@ -6,6 +6,7 @@ from botorch.optim import optimize_acqf, gen_batch_initial_conditions
 import gpytorch
 from dumbo.decomposition_sampling import *
 import warnings
+import multiprocessing
 
 class DumboAcqFunction(AnalyticAcquisitionFunction):
 	r"""
@@ -421,7 +422,7 @@ class ADMM:
 	final query recommendation.
 	"""
 
-	def __init__(self, factors, abstol=0.05, max_it=10, initial_eta=1.0):
+	def __init__(self, factors, abstol=0.05, max_it=10, initial_eta=1.0, n_cores=None):
 		"""Build the ADMM object
 
 		Args:
@@ -429,6 +430,8 @@ class ADMM:
 				abstol (float, optional): the aggregation precision as a stopping criterion. Defaults to 0.05.
 				max_it (int, optional): the maximal number of ADMM iteration as stopping criterion. Defaults to 10.
 				initial_eta (float, optional): the initial weight for the quadratic penalty. Defaults to 1.0.
+				n_cores (int, optional): the number of cores available for parallel computation. If `None` is provided, it is
+				set to the return value of `multiprocessing.cpu_count()`. Defaults to None.
 		"""
 		self._factors = factors
 		self._abstol = abstol
@@ -438,6 +441,8 @@ class ADMM:
 		self._factor_variable_matrix = self.build_factor_variable_matrix()
 		self._n = self._factor_variable_matrix.shape[0]
 		self._d = self._factor_variable_matrix.shape[1]
+		
+		self._n_cores = n_cores if n_cores is not None else multiprocessing.cpu_count()
 
 	def build_factor_variable_matrix(self):
 		"""Build the factor-variable matrix, also known as the adjacency matrix of the factor graph.
@@ -581,7 +586,7 @@ class ADMM:
 				list: the list of candidates for each factor
 		"""
 		all_candidates = None
-		with mp.Pool(processes=None) as processes:
+		with mp.Pool(processes=self._n_cores) as processes:
 			args = [(gp, xm[gp.active_dims()] if xm is not None else None, lambdas[i], eta, x[i]) for i,gp in enumerate(self._factors)]
 			all_candidates = processes.starmap(ADMM.parallel_optimization, args)
 
@@ -652,7 +657,7 @@ class DuMBOOptimizer:
 	This class contains the DuMBO optimizer as described in [1] and is the main interface with the final user.
 	"""
 
-	def __init__(self, intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, precision=0.05, max_it=10, base_kernel_class=gpytorch.kernels.MaternKernel, base_kernel_args=[2.5]):
+	def __init__(self, intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, precision=0.05, max_it=10, base_kernel_class=gpytorch.kernels.MaternKernel, base_kernel_args=[2.5], n_cores=None):
 		"""Build the DuMBO optimizer
 
 		Args:
@@ -674,6 +679,8 @@ class DuMBOOptimizer:
 				base_kernel_class (class from gpytorch.kernels.Kernel, optional): kernel used for each factor of the inferred
 				additive decompositions. Defaults to gpytorch.kernels.MaternKernel.
 				base_kernel_args (list, optional): arguments for the base kernel. Defaults to [2.5].
+				n_cores (int, optional): the number of cores for parallel computation. If `None` is provided, it is set to the
+				return value of `multiprocessing.cpu_count()`.
 		"""
 		intervals = torch.tensor(intervals, dtype=torch.double)
 		self._normed_intervals = torch.zeros(intervals.size(), dtype=torch.double)
@@ -700,6 +707,8 @@ class DuMBOOptimizer:
 
 		self._t = 0 if self._X is None else self._X.shape[0]
 		self._n_samples_per_iteration = n_samples_per_iteration if self._dmax > 1 else 1
+
+		self._n_cores = n_cores if n_cores is not None else multiprocessing.cpu_count()
 
 	def first_decomposition(self):
 		if self._n_init_points <= 0:
@@ -789,7 +798,7 @@ class DuMBOOptimizer:
 				factor_shift += len(kernels)
 
 			# Create ADMM and find the next query
-			optimizer = ADMM(factors, abstol=self._precision, max_it=self._max_it)
+			optimizer = ADMM(factors, abstol=self._precision, max_it=self._max_it, n_cores=self._n_cores)
 			return self.denormalize_X(optimizer.next_query()).numpy()
 	
 	def tell(self, x, y):
