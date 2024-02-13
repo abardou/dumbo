@@ -63,8 +63,8 @@ dumbo_optimizer = DuMBOOptimizer(
   n_samples_per_iteration=5, # Number of sampled additive decompositions
   precision=0.05, max_it=10, # ADMM stopping criteria
   base_kernel_class=gpytorch.kernels.MaternKernel, # Kernel class for the factors
-  base_kernel_args=[2.5] # Arguments for instantiating the kernel class
-  n_cores=None, # Number of available cores for parallel computation
+  base_kernel_args=[2.5], # Arguments for instantiating the kernel class
+  n_cores=None # Number of available cores for parallel computation
 )
 ```
 
