@@ -810,8 +810,18 @@ class DuMBOOptimizer:
 		"""
 		self._t += 1
 		self._X = torch.cat((self._X, torch.reshape(torch.tensor(x, dtype=torch.double), (1,-1)))) if self._X is not None else torch.reshape(torch.tensor(x, dtype=torch.double), (1,-1))
+
+		# Check for duplicate input
+		dup = False
+		uniq_X = torch.unique(self._X, dim=0)
+		if uniq_X.size(0) != self._X.size(0):
+			# The input is a duplicate, don't add it to the dataset
+			self._X = uniq_X
+			dup = True
+
 		self.normalize_X()
-		self._y = torch.cat((self._y, torch.tensor([y], dtype=torch.double))) if self._y is not None else torch.tensor([y], dtype=torch.double)
+		if not dup:
+			self._y = torch.cat((self._y, torch.tensor([y], dtype=torch.double))) if self._y is not None else torch.tensor([y], dtype=torch.double)
 		self.standardize_y()
 
 		if self._n_init_points > 0:
