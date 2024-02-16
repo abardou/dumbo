@@ -76,6 +76,7 @@ Its arguments are detailed below. Assuming that you want to optimize a black-box
 * `n_init_points` indicates how many observations must be uniformly sampled in $\mathcal{D}$ before using ADMM. Cannot be lower than 2 for normalization purposes. If $n$ is larger than `n_init_points`, ADMM is used immediately.
 * `dmax` indicates the Maximal Factor Size (MFS) for the inferred additive decompositions. If `None` is provided, `dmax` is set to $d$.
 * `n_samples_per_iteration` indicates the number of additive decompositions inferred at each iteration of DuMBO.
+* `uniform_decomposition_sampling` indicates whether the additive decompositions should be sampled uniformingly (optimal on average in the worst case, as shown by [5]) or by the MCMC sampler described in [3].
 * `precision` is the first stopping criterion for ADMM. The smaller it is, the more iterations are required for ADMM to stop.
 * `max_it` is the second stopping criterion for ADMM. It bounds the number of ADMM iterations.
 * `base_kernel_class` is the class of the covariance function for each factor of the inferred additive decompositions. It must derive from `gpytorch.kernels.Kernel`.
@@ -106,3 +107,5 @@ The references listed here are cited with their unique id number within brackets
 [3] Gardner, J., Guo, C., Weinberger, K., Garnett, R., & Grosse, R. (2017, April). Discovering and exploiting additive structure for Bayesian optimization. In Artificial Intelligence and Statistics (pp. 1311-1319). PMLR.
 
 [4] Gabay, D., & Mercier, B. (1976). A dual algorithm for the solution of nonlinear variational problems via finite element approximation. Computers & mathematics with applications, 2(1), 17-40.
+
+[5] Ziomek, J. K., & Ammar, H. B. (2023, July). Are random decompositions all we need in high dimensional Bayesian optimisation?. In International Conference on Machine Learning (pp. 43347-43368). PMLR.

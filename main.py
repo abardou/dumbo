@@ -37,7 +37,7 @@ if __name__ == "__main__":
 	max_objective_function_value = 3.32237
 	intervals = hartmann6d_intervals()
 	# Create the optimizer, set the hyperparameters
-	optimizer = DuMBOOptimizer(intervals, n_init_points=2, n_samples_per_iteration=5, max_it=8)
+	optimizer = DuMBOOptimizer(intervals, n_init_points=2, n_samples_per_iteration=5, uniform_decomposition_sampling=False, max_it=8)
 
 	# Simple optimization loop
 	n_iterations = 150

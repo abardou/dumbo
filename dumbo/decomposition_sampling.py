@@ -1,7 +1,7 @@
 import numpy as np
 import random
 import dumbo.optimize
-import gpytorch
+import multiprocessing as mp
 
 r"""
 Methods for sampling additive decomposition according to Gardner et. al. (2017) (see [3] in README.md at the root
@@ -54,17 +54,20 @@ def random_partition(n):
 		n -= k
 	return p
 
-def random_additive_decomposition(d, dmax):
+def random_additive_decomposition(d, dmax=None):
 	"""Sample a random additive decomposition for a `d`-dimensional function. Each factor of the decomposition will be at
 	most `dmax`-dimensional.
 
 	Args:
 			d (int): the number of dimensions
-			dmax (int): the maximum factor size of the returned decomposition
+			dmax (int, optional): the maximum factor size of the returned decomposition. If `None` is provided, set to `d`.
+			Defaults to None.
 
 	Returns:
 			list: a list of one numpy.array per factor of the decomposition, containing the dimension indices of the factor
 	"""
+	dmax = dmax if dmax is not None else d
+
 	dims = np.arange(d)
 	np.random.shuffle(dims)
 	saved = np.array([])
@@ -287,3 +290,49 @@ def mcmc_sampling(decomposition, fitted_model, dmax, X, y, base_kernel_class, ba
 		decompositions.append(new_dec)
 
 	return decompositions, models
+
+def parallel_uniform_sampling(dmax, X, y, base_kernel_class, base_kernel_args):
+	"""Sample an additive decomposition uniformingly and build an additive model w.r.t. it.
+
+	Args:
+			dmax (int): the maximal factor size of the decomposition
+			X (torch.Tensor): the training observations in the input space, shape `(n,d)` for `n` observations and
+			`d`-dimensional input space
+			y (torch.Tensor): the training observations in the output space, shape `(n,)` for `n` observations
+			base_kernel_class (class from gpytorch.kernels.Kernel): the kernel used for each factor of the sampled additive
+			decompositions.
+			base_kernel_args (list): list of arguments for the base kernel.
+
+	Returns:
+			tuple: the additive decomposition along with the fitted additive model.
+	"""
+	d = X.size(1)
+	rad = random_additive_decomposition(d, dmax)
+	model = dumbo.optimize.MyOwnGP.model_from_decomposition(rad, X, y, base_kernel_class=base_kernel_class, base_kernel_args=base_kernel_args)
+	model.fit()
+
+	return rad, model
+
+def uniform_sampling(dmax, X, y, base_kernel_class, base_kernel_args, k=5, n_cores=None):
+	"""Sample `k` additive decompositions starting from the provided additive decomposition `decomposition`.
+
+	Args:
+			dmax (int): the maximal factor size of the decomposition
+			X (torch.Tensor): the training observations in the input space, shape `(n,d)` for `n` observations and
+			`d`-dimensional input space
+			y (torch.Tensor): the training observations in the output space, shape `(n,)` for `n` observations
+			base_kernel_class (class from gpytorch.kernels.Kernel): the kernel used for each factor of the sampled additive
+			decompositions.
+			base_kernel_args (list): list of arguments for the base kernel.
+			k (int, optional): the number of additive decompositions to sample. Defaults to 5.
+			n_cores (int, optional): the number of cores available for parallel computation. If `None` is provided, it is
+				set to the return value of `multiprocessing.cpu_count()`. Defaults to None.
+
+	Returns:
+			tuple: the list of sampled decompositions along with the gaussian processes built upon them
+	"""
+	args = [(dmax, X, y, base_kernel_class, base_kernel_args) for _ in range(k)]
+	with mp.Pool(processes=n_cores) as processes:
+		rads_models = processes.starmap(parallel_uniform_sampling, args)
+
+	return [rm[0] for rm in rads_models], [rm[1] for rm in rads_models]

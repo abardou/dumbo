@@ -657,7 +657,7 @@ class DuMBOOptimizer:
 	This class contains the DuMBO optimizer as described in [1] and is the main interface with the final user.
 	"""
 
-	def __init__(self, intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, precision=0.05, max_it=10, base_kernel_class=gpytorch.kernels.MaternKernel, base_kernel_args=[2.5], n_cores=None):
+	def __init__(self, intervals, X=None, y=None, n_init_points=2, dmax=None, n_samples_per_iteration=5, uniform_decomposition_sampling=False, precision=0.05, max_it=10, base_kernel_class=gpytorch.kernels.MaternKernel, base_kernel_args=[2.5], n_cores=None):
 		"""Build the DuMBO optimizer
 
 		Args:
@@ -672,6 +672,8 @@ class DuMBOOptimizer:
 				Defaults to None.
 				n_samples_per_iteration (int, optional): number of additive decomposition sampled at each iteration. Defaults to
 				5.
+				uniform_decomposition_sampling (bool, optional): if False, additive decompositions are sampled with a MCMC
+				algorithm described in [3]. Otherwise, they are sampled uniformingly among the set of additive decompositions.
 				precision (float, optional): tolerance on the diversity of the candidates found by ADMM. Stopping criterion for
 				ADMM. Defaults to 0.05.
 				max_it (int, optional): number of maximal iterations allowed for ADMM. Stopping criterion for ADMM. Defaults to
@@ -703,6 +705,7 @@ class DuMBOOptimizer:
 
 		self._d = len(intervals)
 		self._dmax = self._d if dmax is None else dmax
+		self._uniform_decomposition_sampling = uniform_decomposition_sampling
 		self.first_decomposition()
 
 		self._t = 0 if self._X is None else self._X.shape[0]
@@ -761,7 +764,10 @@ class DuMBOOptimizer:
 			
 			if self._dmax > 1:
 				# Sample n_samples_per_iteration additive decompositions
-				decompositions, models = mcmc_sampling(self._current_decomposition, self._current_model, self._dmax, self._norm_X, self._norm_y, self._base_kernel_class, self._base_kernel_args, k=self._n_samples_per_iteration)
+				if self._uniform_decomposition_sampling:
+					decompositions, models = uniform_sampling(self._dmax, self._norm_X, self._norm_y, self._base_kernel_class, self._base_kernel_args, k=self._n_samples_per_iteration)
+				else:
+					decompositions, models = mcmc_sampling(self._current_decomposition, self._current_model, self._dmax, self._norm_X, self._norm_y, self._base_kernel_class, self._base_kernel_args, k=self._n_samples_per_iteration)
 				self._current_decomposition = decompositions[-1]
 				self._current_model = models[-1]
 			else:
@@ -830,5 +836,6 @@ class DuMBOOptimizer:
 		else:
 			current_ker_model = self._current_model.covar_module
 			current_likelihood = self._current_model.likelihood
-			self._current_model = MyOwnGP(current_ker_model, self._norm_X, self._norm_y, current_likelihood)
-			self._current_model.fit()
+			if not self._uniform_decomposition_sampling:
+				self._current_model = MyOwnGP(current_ker_model, self._norm_X, self._norm_y, current_likelihood)
+				self._current_model.fit()
